@@ -103,6 +103,5 @@ ENV/
 # Visual Studio Code Settings
 .vscode/
 
-# Settings
-
-settings.py
+# Config
+conf/

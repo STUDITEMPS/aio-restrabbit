@@ -3,10 +3,10 @@ import traceback
 import logging
 import aiohttp
 
-from settings import KISS_BASE_URL
-from settings import KISS_TOKEN_URL
-from settings import KISS_CREDENTIALS
-from settings import KISS_CLOUDAMQP_ENDPOINT
+from conf.settings import KISS_BASE_URL
+from conf.settings import KISS_TOKEN_URL
+from conf.settings import KISS_CREDENTIALS
+from conf.settings import KISS_CLOUDAMQP_ENDPOINT
 
 class KissApi(object):
     def __init__(self):

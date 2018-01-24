@@ -1,0 +1,9 @@
+version: "2.0"
+services:
+    aio-restrabbit:
+      build: .
+      image: studitemps/aio-restrabbit
+      container_name: aio-restrabbit
+      volumes:
+        - ./conf:/opt/aio-restrabbit/conf
+      network_mode: bridge

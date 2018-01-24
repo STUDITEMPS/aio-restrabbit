@@ -7,9 +7,9 @@ import logging
 import traceback
 
 from kiss_api import KissApi, KissApiException
-from settings import CLOUD_RABBITMQ_URL
-from settings import CLOUD_RABBITMQ_EXCHANGE
-from settings import CLOUD_RABBITMQ_CHANNEL
+from conf.settings import CLOUD_RABBITMQ_URL
+from conf.settings import CLOUD_RABBITMQ_EXCHANGE
+from conf.settings import CLOUD_RABBITMQ_CHANNEL
 
 kiss_api = KissApi()
 logger = logging.getLogger('Service')
