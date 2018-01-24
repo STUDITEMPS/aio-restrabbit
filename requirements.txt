@@ -1,3 +1,3 @@
 pika
 aio-pika
-requests
+aiohttp
