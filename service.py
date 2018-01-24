@@ -8,7 +8,8 @@ import traceback
 
 from kiss_api import KissApi, KissApiException
 from settings import CLOUD_RABBITMQ_URL
-from settings import CLOUD_RABBITMQ_ROUTING_KEY
+from settings import CLOUD_RABBITMQ_EXCHANGE
+from settings import CLOUD_RABBITMQ_CHANNEL
 
 kiss_api = KissApi()
 logger = logging.getLogger('Service')
@@ -50,11 +51,11 @@ async def main(loop):
     )
     channel = await connection.channel()
     kiss_exchange = await channel.declare_exchange(
-        'kiss',
+        CLOUD_RABBITMQ_EXCHANGE,
         ExchangeType.TOPIC,
         durable=True
     )
-    queue = await channel.declare_queue('iao-restrabbit')
+    queue = await channel.declare_queue(CLOUD_RABBITMQ_CHANNEL)
     await queue.bind(kiss_exchange, routing_key='#')
     await queue.consume(on_message, no_ack=True)
 
