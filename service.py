@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
-from aio_pika import connect, IncomingMessage
+from aio_pika import connect, IncomingMessage, ExchangeType
 from datetime import datetime
 import json
 import logging
@@ -49,7 +49,13 @@ async def main(loop):
         loop=loop
     )
     channel = await connection.channel()
+    kiss_exchange = await channel.declare_exchange(
+        'kiss',
+        ExchangeType.TOPIC,
+        durable=True
+    )
     queue = await channel.declare_queue('iao-restrabbit')
+    await queue.bind(kiss_exchange, routing_key='#')
     await queue.consume(on_message, no_ack=True)
 
 
