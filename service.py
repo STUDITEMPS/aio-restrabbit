@@ -79,7 +79,7 @@ class AioServer(object):
                 await queue.bind(exchange, routing_key=routing_key)
         self.logger.debug('aio-pika connection ready')
         app['aio_pika'] = app.loop.create_task(
-            queue.consume(self.on_rabbitmq_message, no_ack=True)
+            queue.consume(self.on_rabbitmq_message, no_ack=False)
         )
 
     async def cleanup_aoi_pika_task(self, app):
@@ -102,6 +102,9 @@ class AioServer(object):
                 return callback
         return None
 
+    def get_exchange(self, message):
+        return self.registed_exchanges.get(message.exchange)
+
     async def on_rabbitmq_message(self, message: aio_pika.IncomingMessage):
         """
         on_message doesn't necessarily have to be defined as async.
@@ -120,7 +123,12 @@ class AioServer(object):
             'routing_key': message.routing_key,
             'body': message.body.decode(message.content_encoding or 'utf8')
         })
-        await self.kiss_api.send_msg(msg, callback_url)
+        try:
+            await self.kiss_api.send_msg(msg, callback_url)
+            message.ack()
+        except:
+            message.reject(requeue=True)
+            raise
         await asyncio.sleep(5)
 
     def exception_handler(self, loop, context):
