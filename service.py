@@ -89,23 +89,25 @@ class AioServer(object):
         await self.aio_pika_connection.close()
         self.logger.debug('aio-pika connection closed')
 
-    def get_callback_for_routing_key(self, key):
+    def get_callback_for_message(self, message):
         exchanges_data = self.config.get('CLOUD_RABBITMQ', 'EXCHANGES')
-        for data in exchanges_data.values():
-            for routing_key, callback in data.items():
-                if routing_key[-1] == '#':
-                    if key.startswith(routing_key[:-1]):
-                        return callback
-                elif routing_key == key:
-                    return callback
+        exchange_routing = exchanges_data.get(message.exchange)
+        if exchange_routing is None:
             return None
+        for routing_key, callback in exchange_routing.items():
+            if routing_key[-1] == '#':
+                if message.routing_key.startswith(routing_key[:-1]):
+                    return callback
+            elif routing_key == message.routing_key:
+                return callback
+        return None
 
     async def on_rabbitmq_message(self, message: aio_pika.IncomingMessage):
         """
         on_message doesn't necessarily have to be defined as async.
         Here it is to show that it's possible.
         """
-        callback_url = self.get_callback_for_routing_key(message.routing_key)
+        callback_url = self.get_callback_for_message(message)
         if not callback_url:
             self.logger.error('WTF? unknown routing key: {}'.format(message.routing_key))
             return
