@@ -1,7 +1,8 @@
-import json
-import traceback
-import logging
 import aiohttp
+import asyncio
+import json
+import logging
+import traceback
 
 class KissApi(object):
     def __init__(self, config):
@@ -11,6 +12,7 @@ class KissApi(object):
         self.token_url = '{}{}'.format(self.base_url, token_part)
         self.access_token = None
         self.logger = logging.getLogger('KissApi')
+        self.getting_token = False
 
     async def refresh_access_token(self):
         self.logger.debug('getting a new_access token')
@@ -27,6 +29,7 @@ class KissApi(object):
             )
             raise KissApiException('unable to fetch api token')
         self.access_token = data['access_token']
+        self.getting_token = False
 
     async def send_async_post(self, url, data, **kwargs):
         async with aiohttp.ClientSession() as session:
@@ -46,7 +49,10 @@ class KissApi(object):
 
     async def send_msg(self, json_data, callback_url, first=True):
         self.logger.debug('sending msg')
+        while self.getting_token:
+            await asyncio.sleep(.1)
         if self.access_token is None:
+            self.getting_token = True
             await self.refresh_access_token()
             self.logger.debug('Recieved new access token')
         headers = {

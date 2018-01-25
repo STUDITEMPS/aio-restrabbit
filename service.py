@@ -141,7 +141,12 @@ class AioServer(object):
     def exception_handler(self, loop, context):
         e = context.get('exception', None)
         if not e:
-            self.logger.error('Unknown Exception: {}'.format(context['message']))
+            if context['message'] == 'Task was destroyed but it is pending!':
+                pass
+            else:
+                self.logger.error(
+                    'Unknown Exception: {}'.format(context['message'])
+                )
         elif isinstance(e, RuntimeError):
             pass
         elif not isinstance(e, KissApiException):
