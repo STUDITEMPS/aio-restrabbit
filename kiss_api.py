@@ -3,16 +3,12 @@ import traceback
 import logging
 import aiohttp
 
-from conf.settings import KISS_BASE_URL
-from conf.settings import KISS_TOKEN_URL
-from conf.settings import KISS_CREDENTIALS
-from conf.settings import KISS_CLOUDAMQP_ENDPOINT
-
 class KissApi(object):
-    def __init__(self):
-        self.base_url = KISS_BASE_URL
-        self.token_url = '{}{}'.format(KISS_BASE_URL, KISS_TOKEN_URL)
-        self.send_url = '{}{}'.format(KISS_BASE_URL, KISS_CLOUDAMQP_ENDPOINT)
+    def __init__(self, config):
+        self.config = config
+        self.base_url = config.get('KISS', 'BASE_URL')
+        token_part = config.get('KISS', 'TOKEN_URL')
+        self.token_url = '{}{}'.format(self.base_url, token_part)
         self.access_token = None
         self.logger = logging.getLogger('KissApi')
 
@@ -20,7 +16,7 @@ class KissApi(object):
         self.logger.debug('getting a new_access token')
         status, data = await self.send_async_post(
             self.token_url,
-            KISS_CREDENTIALS,
+            self.config.get('KISS', 'OAUTH_CREDENTIALS'),
             allow_redirects=True,
             verify_ssl=True
         )
@@ -46,7 +42,7 @@ class KissApi(object):
             finally:
                 session.close()
 
-    async def send_msg(self, json_data, first=True):
+    async def send_msg(self, json_data, callback_url, first=True):
         self.logger.debug('sending msg')
         if self.access_token is None:
             await self.refresh_access_token()
@@ -57,7 +53,7 @@ class KissApi(object):
             'Accept': 'application/json',
         }
         status, data = await self.send_async_post(
-            self.send_url,
+            '{}{}'.format(self.base_url, callback_url),
             json_data,
             headers=headers,
             verify_ssl=True,

@@ -7,17 +7,9 @@ import json
 import logging
 import traceback
 import sys
+import yaml
 
 from kiss_api import KissApi, KissApiException
-from conf.settings import CLOUD_RABBITMQ_URL
-from conf.settings import CLOUD_RABBITMQ_EXCHANGE
-from conf.settings import CLOUD_RABBITMQ_CHANNEL
-from conf.settings import DEBUG
-from conf.settings import WEBSERVER_HOST
-from conf.settings import WEBSERVER_PORT
-
-kiss_api = KissApi()
-logger = logging.getLogger('Service')
 
 class AioServer(object):
     """
@@ -25,12 +17,13 @@ class AioServer(object):
     aio-pika connection.
     The Rest connection is created by kiss_api.KissApi()
     """
-    def __init__(self, host='localhost', port=12345):
-        self.host = host
-        self.port = port
+    def __init__(self, config):
+        self.config = config
+        self.host = self.config.get('WEBSERVER', 'HOST')
+        self.port = self.config.get('WEBSERVER', 'PORT')
         self.loop = asyncio.get_event_loop()
         self.loop.set_exception_handler(self.exception_handler)
-        self.kiss_api = KissApi()
+        self.kiss_api = KissApi(config)
         self.aio_pika_connection = None
         self.logger = logging.getLogger('AioService')
         self.startup_timestamp = datetime.now()
@@ -68,17 +61,22 @@ class AioServer(object):
     async def start_aoi_pika_task(self, app):
         self.logger.debug('Starting aio-pika connection...')
         self.aio_pika_connection = await aio_pika.connect(
-            CLOUD_RABBITMQ_URL,
+            self.config.get('CLOUD_RABBITMQ', 'URL'),
             loop=self.loop
         )
         channel = await self.aio_pika_connection.channel()
-        kiss_exchange = await channel.declare_exchange(
-            CLOUD_RABBITMQ_EXCHANGE,
-            aio_pika.ExchangeType.TOPIC,
-            durable=True
-        )
-        queue = await channel.declare_queue(CLOUD_RABBITMQ_CHANNEL)
-        await queue.bind(kiss_exchange, routing_key='#')
+        exchange_data = self.config.get('CLOUD_RABBITMQ', 'EXCHANGES')
+        for exchange_name, data in exchange_data.items():
+            exchange = await channel.declare_exchange(
+                exchange_name,
+                aio_pika.ExchangeType.TOPIC,
+                durable=True
+            )
+            queue = await channel.declare_queue(
+                self.config.get('CLOUD_RABBITMQ', 'CHANNEL')
+            )
+            for routing_key in data.keys():
+                await queue.bind(exchange, routing_key=routing_key)
         self.logger.debug('aio-pika connection ready')
         app['aio_pika'] = app.loop.create_task(
             queue.consume(self.on_rabbitmq_message, no_ack=True)
@@ -91,11 +89,27 @@ class AioServer(object):
         await self.aio_pika_connection.close()
         self.logger.debug('aio-pika connection closed')
 
+    def get_callback_for_routing_key(self, key):
+        exchanges_data = self.config.get('CLOUD_RABBITMQ', 'EXCHANGES')
+        for data in exchanges_data.values():
+            for routing_key, callback in data.items():
+                if routing_key[-1] == '#':
+                    if key.startswith(routing_key[:-1]):
+                        return callback
+                elif routing_key == key:
+                    return callback
+            return None
+
     async def on_rabbitmq_message(self, message: aio_pika.IncomingMessage):
         """
         on_message doesn't necessarily have to be defined as async.
         Here it is to show that it's possible.
         """
+        callback_url = self.get_callback_for_routing_key(message.routing_key)
+        if not callback_url:
+            self.logger.error('WTF? unknown routing key: {}'.format(message.routing_key))
+            return
+
         msg = json.dumps({
             'headers': message.headers,
             'content_encoding': message.content_encoding,
@@ -104,23 +118,22 @@ class AioServer(object):
             'routing_key': message.routing_key,
             'body': message.body.decode(message.content_encoding or 'utf8')
         })
-        response = await self.kiss_api.send_msg(msg)
+        await self.kiss_api.send_msg(msg, callback_url)
         await asyncio.sleep(5)
 
     def exception_handler(self, loop, context):
         e = context.get('exception', None)
         if not e:
-            logger.error('Unknown Exception: {}'.format(context['message']))
+            self.logger.error('Unknown Exception: {}'.format(context['message']))
         elif not isinstance(e, KissApiException):
-            logger.error(
+            self.logger.error(
                 ''.join(
                     traceback.format_exception(e, None, e.__traceback__)
                 )
             )
-            logger.error('{}: {}'.format(e.__class__.__name__, e))
+            self.logger.error('{}: {}'.format(e.__class__.__name__, e))
         self.app.shutdown()
         loop.call_soon_threadsafe(loop.stop)
-
 
 def setup_verbose_console_logging():
     root = logging.getLogger()
@@ -133,10 +146,57 @@ def setup_verbose_console_logging():
     ch.setFormatter(formatter)
     root.addHandler(ch)
 
+class Config(object):
+    def __init__(self):
+        self.current_subpath = []
+
+        with open("conf/settings.yml", 'r') as fstream:
+            self.data = yaml.load(fstream)
+
+    def get(self, *splitted_path):
+        if len(splitted_path) == 0:
+            self.current_subpath = []
+            raise AttributeError('Must be called with at last one attr')
+        src = self.data
+        for part in self.current_subpath:
+            src = self.data.get(part)
+        active_param = splitted_path[0]
+        if len(splitted_path) == 1:
+            try:
+                value = src.get(active_param)
+                if value is None:
+                    raise AttributeError
+                self.current_subpath = []
+                return value
+            except AttributeError:
+                raise self.ConfigException(self, active_param)
+        else:
+            try:
+                if src.get(active_param) is None:
+                    raise AttributeError
+            except AttributeError:
+                raise self.ConfigException(self, active_param)
+        self.current_subpath.append(splitted_path[0])
+        splitted_path = splitted_path[1:]
+        return self.get(*splitted_path)
+
+
+    class ConfigException(Exception):
+        def __init__(self, config, active_param):
+            text = (
+                'Unable to find Parameter "{}" in config section {}'
+                .format(active_param, config.current_subpath)
+            )
+            config.current_subpath = []
+            super().__init__(text)
+
+
+
 if __name__ == "__main__":
-    if DEBUG:
+    config = Config()
+    if config.get('DEBUG'):
         setup_verbose_console_logging()
-    server = AioServer(host=WEBSERVER_HOST, port=WEBSERVER_PORT)
+    server = AioServer(config)
     server.run_app()
 
 
