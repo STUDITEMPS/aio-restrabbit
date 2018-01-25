@@ -5,8 +5,9 @@ import aio_pika
 from datetime import datetime
 import json
 import logging
-import traceback
+import pika
 import sys
+import traceback
 import yaml
 
 from kiss_api import KissApi, KissApiException
@@ -27,6 +28,7 @@ class AioServer(object):
         self.aio_pika_connection = None
         self.logger = logging.getLogger('AioService')
         self.startup_timestamp = datetime.now()
+        self.rabbitmq_channel = None
 
     def run_app(self):
         loop = self.loop
@@ -64,15 +66,15 @@ class AioServer(object):
             self.config.get('CLOUD_RABBITMQ', 'URL'),
             loop=self.loop
         )
-        channel = await self.aio_pika_connection.channel()
+        self.rabbitmq_channel = await self.aio_pika_connection.channel()
         exchange_data = self.config.get('CLOUD_RABBITMQ', 'EXCHANGES')
         for exchange_name, data in exchange_data.items():
-            exchange = await channel.declare_exchange(
+            exchange = await self.rabbitmq_channel.declare_exchange(
                 exchange_name,
                 aio_pika.ExchangeType.TOPIC,
                 durable=True
             )
-            queue = await channel.declare_queue(
+            queue = await self.rabbitmq_channel.declare_queue(
                 self.config.get('CLOUD_RABBITMQ', 'CHANNEL')
             )
             for routing_key in data.keys():
@@ -127,7 +129,12 @@ class AioServer(object):
             await self.kiss_api.send_msg(msg, callback_url)
             message.ack()
         except:
-            message.reject(requeue=True)
+            try:
+                message.reject(requeue=True)
+            except pika.exceptions.ChannelClosed:
+                return
+            except RuntimeError:
+                return
             raise
         await asyncio.sleep(5)
 
@@ -135,6 +142,8 @@ class AioServer(object):
         e = context.get('exception', None)
         if not e:
             self.logger.error('Unknown Exception: {}'.format(context['message']))
+        elif isinstance(e, RuntimeError):
+            pass
         elif not isinstance(e, KissApiException):
             self.logger.error(
                 ''.join(
@@ -143,7 +152,10 @@ class AioServer(object):
             )
             self.logger.error('{}: {}'.format(e.__class__.__name__, e))
         self.app.shutdown()
-        loop.call_soon_threadsafe(loop.stop)
+        try:
+            loop.call_soon_threadsafe(loop.stop)
+        except RuntimeError:
+            pass
 
 def setup_verbose_console_logging():
     root = logging.getLogger()

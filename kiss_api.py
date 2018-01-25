@@ -39,6 +39,8 @@ class KissApi(object):
                 return status, await resp.text()
             except aiohttp.client_exceptions.ClientConnectorError as e:
                 return 0, 'Connection to {} failed'.format(url)
+            except RuntimeError:
+                return
             finally:
                 session.close()
 
