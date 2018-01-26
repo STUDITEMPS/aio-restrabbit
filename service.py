@@ -43,6 +43,7 @@ class AioPikaService(AioClientService):
         self.aio_pika_connection = None
         self.rabbitmq_channel = None
         self.kiss_api = KissApi(self.config)
+        self.exchanges = {}
 
     async def startup_service(self):
         self.logger.debug('Starting aio-pika connection...')
@@ -53,11 +54,7 @@ class AioPikaService(AioClientService):
         self.rabbitmq_channel = await self.aio_pika_connection.channel()
         exchange_data = self.config.get('CLOUD_RABBITMQ', 'EXCHANGES')
         for exchange_name, data in exchange_data.items():
-            exchange = await self.rabbitmq_channel.declare_exchange(
-                exchange_name,
-                aio_pika.ExchangeType.TOPIC,
-                durable=True
-            )
+            exchange = await self.get_exchange(exchange_name)
             queue = await self.rabbitmq_channel.declare_queue(
                 self.config.get('CLOUD_RABBITMQ', 'CHANNEL')
             )
@@ -115,6 +112,32 @@ class AioPikaService(AioClientService):
         message.ack()
         await asyncio.sleep(5)
 
+    async def get_exchange(self, exchange_name):
+        exchange = self.exchanges.get(exchange_name)
+        if exchange is None:
+            exchange = await self.rabbitmq_channel.declare_exchange(
+                exchange_name,
+                aio_pika.ExchangeType.TOPIC,
+                durable=True
+            )
+            self.exchanges[exchange_name] = exchange
+        return exchange
+
+    async def send_message(self, routing_key, msg, headers={}, **kwargs):
+        if 'exchange_name' not in kwargs.keys():
+            exchange_name = self.config.get(
+                'CLOUD_RABBITMQ',
+                'DEFAULT_SENDER_EXCHANGE'
+            )
+        exchange = await self.get_exchange(exchange_name)
+        message = aio_pika.Message(
+            msg.encode('utf8'),
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+            headers=headers,
+            **kwargs
+        )
+        await exchange.publish(message, routing_key=routing_key)
+
 
 class AioWebServer(object):
     """
@@ -153,12 +176,16 @@ class AioWebServer(object):
     async def create_web_app(self):
         self.logger.debug('registering Webserver urls...')
         app = web.Application()
-        app.router.add_post('/', self.index)
+        app.router.add_get('/', self.index)
         app.router.add_get('/heartbeat', self.heartbeat)
         app.router.add_post('/oauth2/access_token/', self.get_token)
         return app
 
     async def index(self, request):
+        await self.client_services.get('AioPikaService').send_message(
+            'test',
+            'Das ist ein Test'
+        )
         return web.Response(text="YEAAAYYY")
 
     async def heartbeat(self, request):
