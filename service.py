@@ -5,12 +5,12 @@ import aio_pika
 from datetime import datetime
 import json
 import logging
-import pika
 import sys
 import traceback
 import yaml
 
 from kiss_api import KissApi, KissApiException
+
 
 class AioServer(object):
     """
@@ -29,8 +29,10 @@ class AioServer(object):
         self.logger = logging.getLogger('AioService')
         self.startup_timestamp = datetime.now()
         self.rabbitmq_channel = None
+        self.active = False
 
     def run_app(self):
+        self.active = True
         loop = self.loop
         self.app = loop.run_until_complete(self.create_web_app())
         self.app.on_startup.append(self.start_aoi_pika_task)
@@ -88,6 +90,10 @@ class AioServer(object):
         self.logger.debug('closing aio-pika connection...')
         app['aio_pika'].cancel()
         await app['aio_pika']
+        await asyncio.sleep(0.5)
+        self.logger.debug('wating for pending requests')
+        await self.kiss_api.wait_for_active_requests()
+        self.logger.debug('done')
         await self.aio_pika_connection.close()
         self.logger.debug('aio-pika connection closed')
 
@@ -114,7 +120,9 @@ class AioServer(object):
         """
         callback_url = self.get_callback_for_message(message)
         if not callback_url:
-            self.logger.error('WTF? unknown routing key: {}'.format(message.routing_key))
+            self.logger.error('WTF? unknown routing key: {}'.format(
+                message.routing_key
+            ))
             return
 
         msg = json.dumps({
@@ -125,17 +133,8 @@ class AioServer(object):
             'routing_key': message.routing_key,
             'body': message.body.decode(message.content_encoding or 'utf8')
         })
-        try:
-            await self.kiss_api.send_msg(msg, callback_url)
-            message.ack()
-        except:
-            try:
-                message.reject(requeue=True)
-            except pika.exceptions.ChannelClosed:
-                return
-            except RuntimeError:
-                return
-            raise
+        await self.kiss_api.send_msg(msg, callback_url)
+        message.ack()
         await asyncio.sleep(5)
 
     def exception_handler(self, loop, context):
@@ -147,8 +146,6 @@ class AioServer(object):
                 self.logger.error(
                     'Unknown Exception: {}'.format(context['message'])
                 )
-        elif isinstance(e, RuntimeError):
-            pass
         elif not isinstance(e, KissApiException):
             self.logger.error(
                 ''.join(
@@ -156,11 +153,12 @@ class AioServer(object):
                 )
             )
             self.logger.error('{}: {}'.format(e.__class__.__name__, e))
-        self.app.shutdown()
-        try:
+        if self.active:
+            self.active = False
+            self.app.shutdown()
             loop.call_soon_threadsafe(loop.stop)
-        except RuntimeError:
-            pass
+
+
 
 def setup_verbose_console_logging():
     root = logging.getLogger()
@@ -172,6 +170,7 @@ def setup_verbose_console_logging():
     )
     ch.setFormatter(formatter)
     root.addHandler(ch)
+
 
 class Config(object):
     def __init__(self):
@@ -207,7 +206,6 @@ class Config(object):
         splitted_path = splitted_path[1:]
         return self.get(*splitted_path)
 
-
     class ConfigException(Exception):
         def __init__(self, config, active_param):
             text = (
@@ -218,12 +216,9 @@ class Config(object):
             super().__init__(text)
 
 
-
 if __name__ == "__main__":
     config = Config()
     if config.get('DEBUG'):
         setup_verbose_console_logging()
     server = AioServer(config)
     server.run_app()
-
-

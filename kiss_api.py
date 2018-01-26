@@ -13,9 +13,11 @@ class KissApi(object):
         self.access_token = None
         self.logger = logging.getLogger('KissApi')
         self.getting_token = False
+        self.active_requests = 0
 
     async def refresh_access_token(self):
         self.logger.debug('getting a new_access token')
+        self.active_requests += 1
         status, data = await self.send_async_post(
             self.token_url,
             self.config.get('KISS', 'OAUTH_CREDENTIALS'),
@@ -42,10 +44,14 @@ class KissApi(object):
                 return status, await resp.text()
             except aiohttp.client_exceptions.ClientConnectorError as e:
                 return 0, 'Connection to {} failed'.format(url)
-            except RuntimeError:
-                return
             finally:
+                self.active_requests -= 1
                 session.close()
+
+    async def wait_for_active_requests(self):
+        while self.active_requests > 0:
+            await asyncio.sleep(0.1)
+        return
 
     async def send_msg(self, json_data, callback_url, first=True):
         self.logger.debug('sending msg')
@@ -60,6 +66,7 @@ class KissApi(object):
             'content-type': 'application/json',
             'Accept': 'application/json',
         }
+        self.active_requests += 1
         status, data = await self.send_async_post(
             '{}{}'.format(self.base_url, callback_url),
             json_data,
