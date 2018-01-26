@@ -1,8 +1,7 @@
 import aiohttp
 import asyncio
-import json
 import logging
-import traceback
+
 
 class KissApi(object):
     def __init__(self, config):
@@ -90,6 +89,7 @@ class KissApi(object):
                 'error while sending msg to kiss endpoint: {}'.format(data)
             )
         return data
+
 
 class KissApiException(Exception):
     pass

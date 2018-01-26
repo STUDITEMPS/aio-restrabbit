@@ -159,7 +159,6 @@ class AioServer(object):
             loop.call_soon_threadsafe(loop.stop)
 
 
-
 def setup_verbose_console_logging():
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
