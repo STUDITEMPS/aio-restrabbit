@@ -13,7 +13,7 @@ class Config(object):
             raise AttributeError('Must be called with at last one attr')
         src = self.data
         for part in self.current_subpath:
-            src = self.data.get(part)
+            src = src.get(part)
         active_param = splitted_path[0]
         if len(splitted_path) == 1:
             try:

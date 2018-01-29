@@ -1,12 +1,17 @@
 import asyncio
 from aiohttp import web
 import aio_pika
+from aiohttp_session import get_session, setup
+from aiohttp_session.cookie_storage import EncryptedCookieStorage
+import base64
+import cryptography.fernet
 from datetime import datetime
 import json
 import logging
 import sys
 import traceback
 
+import auth
 import config
 from kiss_api import KissApi, KissApiException
 
@@ -141,7 +146,7 @@ class AioPikaService(AioClientService):
         await exchange.publish(message, routing_key=routing_key)
 
 
-class AioWebServer(object):
+class AioWebServer(auth.OAuth2):
     """
     This is the base Server that runs the aiohttp web server and shares its
     mainloop with its CLIENT_SERVICES of class AioClientService
@@ -151,7 +156,7 @@ class AioWebServer(object):
     )
 
     def __init__(self, config):
-        self.config = config
+        super().__init__(config)
         self.host = self.config.get('WEBSERVER', 'HOST')
         self.port = self.config.get('WEBSERVER', 'PORT')
         self.loop = asyncio.get_event_loop()
@@ -160,6 +165,10 @@ class AioWebServer(object):
         self.startup_timestamp = datetime.now()
         self.active = False
         self.client_services = {}
+        self.session_key = base64.urlsafe_b64decode(
+            cryptography.fernet.Fernet.generate_key()
+        )
+        self.active_oauth2_tokens = {}
         for cls in self.CLIENT_SERVICES:
             self.client_services[cls.__name__] = cls(self)
 
@@ -178,17 +187,24 @@ class AioWebServer(object):
     async def create_web_app(self):
         self.logger.debug('registering Webserver urls...')
         app = web.Application()
-        app.router.add_get('/', self.index)
+        setup(app, EncryptedCookieStorage(self.session_key))
+        app.router.add_post('/api/send_message', self.send_cloudamqp_message)
         app.router.add_get('/heartbeat', self.heartbeat)
-        app.router.add_post('/oauth2/access_token/', self.get_token)
+        app.router.add_post('/oauth2/access_token/', self.get_access_token)
         return app
 
-    async def index(self, request):
+    @auth.OAuth2.required
+    async def send_cloudamqp_message(self, request):
+        data = await request.post()
+        routing_key = data.get('routing_key', '')
+        message_body = data.get('message_body', '')
+        headers = json.loads(data.get('headers', '{}'))
         await self.client_services.get('AioPikaService').send_message(
-            'test',
-            'Das ist ein Test'
+            routing_key,
+            message_body,
+            headers=headers
         )
-        return web.Response(text="YEAAAYYY")
+        return web.json_response({'status': 'success'})
 
     async def heartbeat(self, request):
         msg = (
@@ -196,9 +212,6 @@ class AioWebServer(object):
             .format(self.startup_timestamp.strftime('%Y-%m-%d %H:%M:%S'))
         )
         return web.Response(text=msg)
-
-    async def get_token(self, request):
-        return web.json_response({'access_token': 'not_valid'})
 
     def exception_handler(self, loop, context):
         e = context.get('exception', None)
