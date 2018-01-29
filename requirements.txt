@@ -1,3 +1,4 @@
 aio-pika
 aiohttp
+aiohttp-session[secure]
 PyYAML
