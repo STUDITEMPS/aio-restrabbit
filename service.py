@@ -1,19 +1,24 @@
+#!/usr/bin/env python3
+
 import asyncio
 from aiohttp import web
+import aiohttp_jinja2
 import aio_pika
 from aiohttp_session import get_session, setup
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 import base64
 import cryptography.fernet
 from datetime import datetime
+import jinja2
 import json
 import logging
+import os
 import sys
 import traceback
 
 import auth
 import config
-from kiss_api import KissApi, KissApiException
+from kiss_api import KissApi, KissApiException, KissOfflineException
 
 
 class AioClientService(object):
@@ -21,6 +26,7 @@ class AioClientService(object):
         self.root_service = root_service
         self.config = root_service.config
         self.active = False
+        self.taking_a_break = False
         self.loop = asyncio.get_event_loop()
         self.app = None
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -39,6 +45,23 @@ class AioClientService(object):
 
     async def shutdown_service(self):
         pass
+
+    def __unicode__(self):
+        return self.__class__.__name__
+
+    async def take_a_break(self, timeout):
+        if self.taking_a_break:
+            return
+        self.taking_a_break = True
+        self.logger.error(
+            u'Service {} is not working properly and takes a break for {} minutes'
+            .format(self, timeout)
+        )
+        await self.shutdown_service()
+        await asyncio.sleep(timeout)
+        await self.startup_service()
+        self.taking_a_break = False
+        self.logger.error(u'Back Online. Lets see if it works now')
 
 
 class AioPikaService(AioClientService):
@@ -97,6 +120,8 @@ class AioPikaService(AioClientService):
         return None
 
     async def on_rabbitmq_message(self, message: aio_pika.IncomingMessage):
+        if self.taking_a_break:
+            message.reject(requeue=True)
         callback_url = self.get_callback_for_message(message)
         if not callback_url:
             self.logger.error('WTF? unknown routing key: {}'.format(
@@ -112,11 +137,14 @@ class AioPikaService(AioClientService):
             'routing_key': message.routing_key,
             'body': message.body.decode(message.content_encoding or 'utf8')
         })
-        await self.kiss_api.send_msg(msg, callback_url)
         try:
+            await self.kiss_api.send_msg(msg, callback_url)
             message.ack()
         except KissApiException:
             message.reject(requeue=True)
+        except KissOfflineException:
+            message.reject(requeue=True)
+            await self.take_a_break(5)
         await asyncio.sleep(5)
 
     async def get_exchange(self, exchange_name):
@@ -159,6 +187,9 @@ class AioWebServer(auth.OAuth2):
         super().__init__(config)
         self.host = self.config.get('WEBSERVER', 'HOST')
         self.port = self.config.get('WEBSERVER', 'PORT')
+        self.project_dir = os.path.dirname(os.path.abspath(__file__))
+        self.template_dir = os.path.join(self.project_dir, 'templates')
+        self.static_dir = os.path.join(self.project_dir, 'static')
         self.loop = asyncio.get_event_loop()
         self.loop.set_exception_handler(self.exception_handler)
         self.logger = logging.getLogger('AioService')
@@ -187,7 +218,13 @@ class AioWebServer(auth.OAuth2):
     async def create_web_app(self):
         self.logger.debug('registering Webserver urls...')
         app = web.Application()
+        app['static_root_url'] = '/static'
         setup(app, EncryptedCookieStorage(self.session_key))
+        aiohttp_jinja2.setup(
+            app,
+            loader=jinja2.FileSystemLoader(self.template_dir)
+        )
+        app.router.add_static('/static', self.static_dir)
         app.router.add_post('/api/send_message', self.send_cloudamqp_message)
         app.router.add_get('/heartbeat', self.heartbeat)
         app.router.add_post('/oauth2/access_token/', self.get_access_token)
@@ -206,12 +243,9 @@ class AioWebServer(auth.OAuth2):
         )
         return web.json_response({'status': 'success'})
 
+    @aiohttp_jinja2.template('heartbeat.html')
     async def heartbeat(self, request):
-        msg = (
-            'Welcome Stranger. Stay a while and listen. I am alive since {}.'
-            .format(self.startup_timestamp.strftime('%Y-%m-%d %H:%M:%S'))
-        )
-        return web.Response(text=msg)
+        return {}
 
     def exception_handler(self, loop, context):
         e = context.get('exception', None)

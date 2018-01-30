@@ -43,6 +43,8 @@ class KissApi(object):
                 return status, await resp.text()
             except aiohttp.client_exceptions.ClientConnectorError as e:
                 return 0, 'Connection to {} failed'.format(url)
+            except aiohttp.client_exceptions.ServerDisconnectedError:
+                raise KissOfflineException('Unable to reach KISS')
             finally:
                 self.active_requests -= 1
                 session.close()
@@ -92,4 +94,7 @@ class KissApi(object):
 
 
 class KissApiException(Exception):
+    pass
+
+class KissOfflineException(Exception):
     pass
