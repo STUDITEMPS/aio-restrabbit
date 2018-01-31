@@ -8,7 +8,17 @@
 {% endblock %}
 
 {% block content %}
-    <h2>AioRestRabbit is alive</h2>
-    <label for="id_start_timestamp">Service aktiv seid</label>
-    <span id="id_start_timestamp">{{ active_since }}</span>
+    <h2>Status</h2>
+    {% for name, service in server.client_services.items() %}
+    <div class="restrabbit-status--container">
+        <label for="id_start_timestamp">{{ name }}</label>
+        {% with type, status = service.status() %}
+        <span id="id_start_timestamp" class="{{ type }}">{{ status }}</span>
+        {% endwith %}
+    </div>
+    {% endfor %}
+    <div class="restrabbit-status--container">
+        <label for="id_start_timestamp">Service aktiv seid</label>
+        <span id="id_start_timestamp" class="info">{{ active_since }}</span>
+    </div>
 {% endblock %}

@@ -13,6 +13,7 @@ import jinja2
 import json
 import logging
 import os
+import pika
 import sys
 import traceback
 
@@ -31,6 +32,13 @@ class AioClientService(object):
         self.app = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
+    def status(self):
+        if not self.active:
+            return ('error', 'offline')
+        if self.taking_a_break:
+            return ('warning', 'paused')
+        return ('success', 'active')
+
     async def startup(self, app):
         self.app = app
         self.active = True
@@ -46,7 +54,7 @@ class AioClientService(object):
     async def shutdown_service(self):
         pass
 
-    def __unicode__(self):
+    def __repr__(self):
         return self.__class__.__name__
 
     async def take_a_break(self, timeout):
@@ -78,7 +86,9 @@ class AioPikaService(AioClientService):
             self.config.get('CLOUD_RABBITMQ', 'URL'),
             loop=self.loop
         )
+        self.logger.debug('creating channel')
         self.rabbitmq_channel = await self.aio_pika_connection.channel()
+        self.logger.debug('creating routing keys')
         exchange_data = self.config.get('CLOUD_RABBITMQ', 'EXCHANGES')
         for exchange_name, data in exchange_data.items():
             exchange = await self.get_exchange(exchange_name)
@@ -101,9 +111,10 @@ class AioPikaService(AioClientService):
         await self.app['aio_pika']
         await asyncio.sleep(0.5)
         self.logger.debug('wating for pending requests')
-        await self.kiss_api.wait_for_active_requests()
+        await self.kiss_api.shutdown()
         self.logger.debug('done')
         await self.aio_pika_connection.close()
+        self.rabbitmq_channel = None
         self.logger.debug('aio-pika connection closed')
 
     def get_callback_for_message(self, message):
@@ -121,7 +132,7 @@ class AioPikaService(AioClientService):
 
     async def on_rabbitmq_message(self, message: aio_pika.IncomingMessage):
         if self.taking_a_break:
-            message.reject(requeue=True)
+            return
         callback_url = self.get_callback_for_message(message)
         if not callback_url:
             self.logger.error('WTF? unknown routing key: {}'.format(
@@ -144,8 +155,7 @@ class AioPikaService(AioClientService):
             message.reject(requeue=True)
         except KissOfflineException:
             message.reject(requeue=True)
-            await self.take_a_break(5)
-        await asyncio.sleep(5)
+            self.root_service.loop.create_task(self.take_a_break(5))
 
     async def get_exchange(self, exchange_name):
         exchange = self.exchanges.get(exchange_name)
@@ -192,7 +202,7 @@ class AioWebServer(auth.OAuth2):
         self.static_dir = os.path.join(self.project_dir, 'static')
         self.loop = asyncio.get_event_loop()
         self.loop.set_exception_handler(self.exception_handler)
-        self.logger = logging.getLogger('AioService')
+        self.logger = logging.getLogger('WebService')
         self.startup_timestamp = datetime.now()
         self.active = False
         self.client_services = {}
@@ -246,9 +256,16 @@ class AioWebServer(auth.OAuth2):
     @aiohttp_jinja2.template('heartbeat.html')
     async def heartbeat(self, request):
         return {
+            'server': self,
             'active_since':
             self.startup_timestamp.strftime('%d.%m.%Y %H:%M:%S')
         }
+
+    def shutdown(self):
+        if self.active:
+            self.active = False
+            self.app.shutdown()
+            self.loop.call_soon_threadsafe(self.loop.stop)
 
     def exception_handler(self, loop, context):
         e = context.get('exception', None)
@@ -266,10 +283,7 @@ class AioWebServer(auth.OAuth2):
                 )
             )
             self.logger.error('{}: {}'.format(e.__class__.__name__, e))
-        if self.active:
-            self.active = False
-            self.app.shutdown()
-            loop.call_soon_threadsafe(loop.stop)
+        self.shutdown()
 
 
 def setup_verbose_console_logging():

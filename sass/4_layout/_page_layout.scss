@@ -5,6 +5,7 @@ div#main {
     border-top-width: 1px;
     border-top-style: solid;
     border-color: map-get($colors, 'secondary');
+    padding: 15px 0 15px 20px;
 }
 
 header a.restrabbit-breadcrump--element {
@@ -12,3 +13,20 @@ header a.restrabbit-breadcrump--element {
     text-decoration: none;
 }
 
+.restrabbit-status--container {
+    label {
+        color: map-get($studitemps-colors, "grey-dark");
+    }
+    span.info {
+        color:  map-get($dialog_colors, "info");
+    }
+    span.success {
+        color:  map-get($dialog_colors, "success");
+    }
+    span.warning {
+        color:  map-get($dialog_colors, "warning");
+    }
+    span.error {
+        color:  map-get($dialog_colors, "error");
+    }
+}

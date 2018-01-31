@@ -45,6 +45,8 @@ class KissApi(object):
                 return 0, 'Connection to {} failed'.format(url)
             except aiohttp.client_exceptions.ServerDisconnectedError:
                 raise KissOfflineException('Unable to reach KISS')
+            except aiohttp.client_exceptions.ClientOSError:
+                raise KissOfflineException('Unable to reach KISS')
             finally:
                 self.active_requests -= 1
                 session.close()
@@ -53,6 +55,12 @@ class KissApi(object):
         while self.active_requests > 0:
             await asyncio.sleep(0.1)
         return
+
+    async def shutdown(self):
+        await self.wait_for_active_requests()
+        self.access_token = None
+        self.getting_token = False
+        self.active_requests = 0
 
     async def send_msg(self, json_data, callback_url, first=True):
         self.logger.debug('sending msg')
