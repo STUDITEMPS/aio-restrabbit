@@ -1,0 +1,79 @@
+$studitemps-colors: (
+    // primary
+    'blue': #0069b4,
+    'blue-bright': #0bbbef,
+    // neutral text
+    'black': #191919,
+    'grey-dark': #505050,
+    'grey': #767676,
+    'white': #ffffff,
+    // neutral layout (+ grey-dark and white)
+    'grey-bright': #cfcfcf,
+    'grey-light': #efefef,
+    // secondary
+    'orange': #ee7326,
+    'purple': #8b4a97,
+    'pink': #e35178,
+    'green': #64b445,
+    // messages (+ green)
+    'red': #c83232,
+    'yellow': #ffea00,
+);
+
+$colors: (
+    'primary':  map-get($studitemps-colors, 'blue'),
+    'secondary': map-get($studitemps-colors, 'blue-bright'),
+    'accent': map-get($studitemps-colors, 'purple'),
+    'success': map-get($studitemps-colors, 'green'),
+    'warning': map-get($studitemps-colors, 'orange'),
+    'danger': map-get($studitemps-colors, 'red'),
+    'revert': map-get($studitemps-colors, 'yellow'),
+    'text': map-get($studitemps-colors, 'black'),
+    'background': map-get($studitemps-colors, 'grey-light'),
+    'transparent': transparent
+);
+
+$text_colors: (
+    'black': map-get($studitemps-colors, 'black'),
+    'dark': map-get($studitemps-colors, 'grey-dark'),
+    'light': map-get($studitemps-colors, 'grey'),
+    'white': map-get($studitemps-colors, 'white'),
+);
+
+
+$button_colors: (
+    'main': map-get($studitemps-colors, 'blue'),
+    'minor': map-get($studitemps-colors, 'blue-bright'),
+    'abort': map-get($studitemps-colors, 'grey-bright')
+);
+
+$dialog_colors: (
+    'info': map-get($studitemps-colors, 'blue'),
+    'success':map-get($studitemps-colors, 'green'),
+    'warning': map-get($studitemps-colors, 'yellow'),
+    'error': map-get($studitemps-colors, 'red'),
+    'neutral': map-get($studitemps-colors, 'grey-light'),
+);
+
+
+$table-colors: (
+    'row-light': map-get($studitemps-colors, 'white'),
+    'row-dark': map-get($studitemps-colors, 'grey-light'),
+    'row-active': map-get($studitemps-colors, 'blue-bright'),
+    'row-hover': map-get($studitemps-colors, 'blue'),
+    'header': map-get($studitemps-colors, 'grey-light'),
+    'filter': map-get($studitemps-colors, 'grey-light'),
+    'filter-labels': map-get($studitemps-colors, 'black'),
+    'border': map-get($studitemps-colors, 'grey-bright'),
+    'action-background': map-get($studitemps-colors, 'white'),
+    'table-background': map-get($studitemps-colors, 'grey-light'),
+    'aggregate': map-get($studitemps-colors, 'grey-light'),
+);
+
+@function set-text-color($value) {
+    @if (lightness($value) > 50) {
+        @return map-get($studitemps-colors, 'black');
+    } @else {
+        @return map-get($studitemps-colors, 'white');
+    }
+};

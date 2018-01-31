@@ -1,0 +1,11 @@
+@import "2_settings/_colors.scss";
+
+div#main {
+    background-color: map-get($studitemps-colors, "white");
+}
+
+header a.restrabbit-breadcrump--element {
+    color: map-get($studitemps-colors, "white");
+    text-decoration: none;
+}
+

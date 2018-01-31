@@ -1,0 +1,14 @@
+{
+    "name": "gulp-aiorestrabbit",
+    "description": "RestRabbit - Gulp",
+    "version": "0.0.1",
+    "author": "Paul Wachendorf",
+    "devDependencies": {
+      "gulp": "^3.9.0",
+      "gulp-sass": "3.1.0",
+      "gulp-load-plugins": "1.5.0",
+      "gulp-util": "3.0.8",
+      "compass-importer": "0.4.1"
+    }
+}
+

@@ -4,7 +4,7 @@ import asyncio
 from aiohttp import web
 import aiohttp_jinja2
 import aio_pika
-from aiohttp_session import get_session, setup
+from aiohttp_session import setup
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 import base64
 import cryptography.fernet
@@ -54,8 +54,8 @@ class AioClientService(object):
             return
         self.taking_a_break = True
         self.logger.error(
-            u'Service {} is not working properly and takes a break for {} minutes'
-            .format(self, timeout)
+            u'Service {} is not working properly and takes a break for {} '
+            u'minutes'.format(self, timeout)
         )
         await self.shutdown_service()
         await asyncio.sleep(timeout)
@@ -245,7 +245,10 @@ class AioWebServer(auth.OAuth2):
 
     @aiohttp_jinja2.template('heartbeat.html')
     async def heartbeat(self, request):
-        return {}
+        return {
+            'active_since':
+            self.startup_timestamp.strftime('%d.%m.%Y %H:%M:%S')
+        }
 
     def exception_handler(self, loop, context):
         e = context.get('exception', None)

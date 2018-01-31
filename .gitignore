@@ -105,3 +105,6 @@ ENV/
 
 # Config
 conf/
+
+# NodeModules
+node_modules/

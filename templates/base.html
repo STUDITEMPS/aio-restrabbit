@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de">
+    <head>
+        <meta charset="utf-8">
+        <link rel="stylesheet" type="text/css" href="{{ static('css/main.css') }}"/>
+        {% block header_extend %}
+        {% endblock %}
+        <title>{% block title %}AioRestRabbit{% endblock %}</title>
+    </head>
+    <body>
+        {% block body %}
+            <header>
+                {% block header_content %}
+                <a class="restrabbit-breadcrump--element" href="/">
+                    AIORestRabbit
+                </a> /
+                {% block breadcrump %}{% endblock %}
+                {% endblock %}
+            </header>
+            <div id="main">
+                {% block content %}
+                {% endblock %}
+            </div>
+        {% endblock %}
+    </body>
+</html>

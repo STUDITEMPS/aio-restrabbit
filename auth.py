@@ -2,7 +2,7 @@ import codecs
 import os
 from aiohttp import web
 from datetime import datetime, timedelta
-import json
+
 
 class OAuth2(object):
     def __init__(self, config):
@@ -47,13 +47,12 @@ class OAuth2(object):
         data = await request.post()
         if data.get('grant_type') != 'client_credentials':
             return web.json_response({
-                'error': 'atm only supported grant_type is "client_credentials"'
+                'error': 'only supported grant_type is "client_credentials"'
             })
         keys = ('client_id', 'client_secret')
         if any([data.get(key) != getattr(self, key) for key in keys]):
             return await self.no_valid_oauth2_callback(request)
         # FIXME: Add check for username and password
-
 
         valid_until = datetime.now() + self.oauth2_timeout
         new_token = await self._generate_token()
@@ -66,7 +65,6 @@ class OAuth2(object):
             "scope": "read"
         }
         return web.json_response(data)
-
 
     @staticmethod
     def required(func):

@@ -96,5 +96,6 @@ class KissApi(object):
 class KissApiException(Exception):
     pass
 
+
 class KissOfflineException(Exception):
     pass

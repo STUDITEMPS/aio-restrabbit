@@ -1,0 +1,31 @@
+h1 {
+    margin: 4px;
+    padding: 4px;
+    font-size: 400%;
+}
+
+h2 {
+    margin: 3px;
+    padding: 3px;
+    font-size: 300%;
+}
+
+h3 {
+    margin: 2px;
+    padding: 2px;
+    font-size: 200%;
+}
+
+body {
+    background-color: map-get($colors, "background");
+}
+
+header {
+    margin: 0px;
+    padding: 2px;
+    background-color: map-get($colors, "primary");
+    align-items: center;
+    padding: 15px 0 15px 20px;
+    font-size: 12px;
+    color: map-get($studitemps-colors, "white");
+}
