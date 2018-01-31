@@ -2,6 +2,9 @@
 
 div#main {
     background-color: map-get($studitemps-colors, "white");
+    border-top-width: 1px;
+    border-top-style: solid;
+    border-color: map-get($colors, 'secondary');
 }
 
 header a.restrabbit-breadcrump--element {
