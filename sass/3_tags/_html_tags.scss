@@ -30,3 +30,33 @@ header {
     font-size: 12px;
     color: map-get($studitemps-colors, "white");
 }
+
+table {
+    padding: 3px;
+    background-color: map-get($table-colors ,'table-background');
+    border: solid 1px;
+    display: inline-block;
+    text-align: center;
+}
+
+thead {
+    background-color: map-get($table-colors, 'header');
+    th {
+        padding: 2px;
+        min-width: 10em;
+    }
+
+}
+
+tbody {
+    td {
+        padding: 2px;
+    }
+    tr:nth-child(2n) {
+        background-color: map-get($table-colors, 'row-dark');
+    }
+    tr:nth-child(2n-1) {
+        background-color: map-get($table-colors, 'row-light');
+    }
+
+}

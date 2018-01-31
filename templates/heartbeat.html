@@ -9,14 +9,25 @@
 
 {% block content %}
     <h2>Status</h2>
-    {% for name, service in server.client_services.items() %}
-    <div class="restrabbit-status--container">
-        <label for="id_start_timestamp">{{ name }}</label>
-        {% with type, status = service.status() %}
-        <span id="id_start_timestamp" class="{{ type }}">{{ status }}</span>
-        {% endwith %}
-    </div>
-    {% endfor %}
+    <table class="restrabbit-status--container">
+        <thead>
+        <tr>
+            <th>Service</th>
+            <th>Status</th>
+            <th>Aktion</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            {% for name, service in server.client_services.items() %}
+                {% with type, status = service.status() %}
+                    <td>{{ name }}</td>
+                    <td class="{{ type }}">{{ status }}</td>
+                    <td>---</td>
+                {% endwith %}
+            {% endfor %}
+        </tr>
+        </tbody>
     <div class="restrabbit-status--container">
         <label for="id_start_timestamp">Service aktiv seid</label>
         <span id="id_start_timestamp" class="info">{{ active_since }}</span>

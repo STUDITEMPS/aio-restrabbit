@@ -17,16 +17,16 @@ header a.restrabbit-breadcrump--element {
     label {
         color: map-get($studitemps-colors, "grey-dark");
     }
-    span.info {
+    .info {
         color:  map-get($dialog_colors, "info");
     }
-    span.success {
+    .success {
         color:  map-get($dialog_colors, "success");
     }
-    span.warning {
+    .warning {
         color:  map-get($dialog_colors, "warning");
     }
-    span.error {
+    .error {
         color:  map-get($dialog_colors, "error");
     }
 }
