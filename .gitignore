@@ -108,3 +108,7 @@ conf/
 
 # NodeModules
 node_modules/
+
+#StartStopService
+.running
+.stopping

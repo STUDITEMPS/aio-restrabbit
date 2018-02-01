@@ -18,15 +18,15 @@
         </tr>
         </thead>
         <tbody>
+        {% for name, service in server.client_services.items() %}
         <tr>
-            {% for name, service in server.client_services.items() %}
-                {% with type, status = service.status() %}
-                    <td>{{ name }}</td>
-                    <td class="{{ type }}">{{ status }}</td>
-                    <td>---</td>
-                {% endwith %}
-            {% endfor %}
+            {% with type, status = service.status() %}
+                <td>{{ name }}</td>
+                <td class="{{ type }}">{{ status }}</td>
+                <td>---</td>
+            {% endwith %}
         </tr>
+        {% endfor %}
         </tbody>
     <div class="restrabbit-status--container">
         <label for="id_start_timestamp">Service aktiv seid</label>

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-import asyncio
 from aiohttp import web
 import aiohttp_jinja2
 import aio_pika
 from aiohttp_session import setup
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
+import argparse
+import asyncio
 import base64
 import cryptography.fernet
 from datetime import datetime
@@ -15,12 +16,16 @@ import logging
 import os
 import pika
 import sys
+import time
 import traceback
+
 
 import auth
 import config
 from kiss_api import KissApi, KissApiException, KissOfflineException
 
+RUNNING_INDICATOR = '.running'
+STOPPING_INDICATOR = '.stopping'
 
 class AioClientService(object):
     def __init__(self, root_service):
@@ -184,6 +189,19 @@ class AioPikaService(AioClientService):
         await exchange.publish(message, routing_key=routing_key)
 
 
+class StartStopService(AioClientService):
+
+    async def startup_service(self):
+        self.root_service.loop.create_task(self.checker())
+
+    async def shutdown_service(self):
+        self.active = False
+
+    async def checker(self):
+        while self.active and not os.path.exists(STOPPING_INDICATOR):
+            await asyncio.sleep(.1)
+        self.root_service.shutdown()
+
 class AioWebServer(auth.OAuth2):
     """
     This is the base Server that runs the aiohttp web server and shares its
@@ -191,6 +209,7 @@ class AioWebServer(auth.OAuth2):
     """
     CLIENT_SERVICES = (
         AioPikaService,
+        StartStopService,
     )
 
     def __init__(self, config):
@@ -236,7 +255,7 @@ class AioWebServer(auth.OAuth2):
         )
         app.router.add_static('/static', self.static_dir)
         app.router.add_post('/api/send_message', self.send_cloudamqp_message)
-        app.router.add_get('/heartbeat', self.heartbeat)
+        app.router.add_get('/', self.index)
         app.router.add_post('/oauth2/access_token/', self.get_access_token)
         return app
 
@@ -253,15 +272,21 @@ class AioWebServer(auth.OAuth2):
         )
         return web.json_response({'status': 'success'})
 
-    @aiohttp_jinja2.template('heartbeat.html')
-    async def heartbeat(self, request):
+    @aiohttp_jinja2.template('status.html')
+    async def index(self, request):
         return {
             'server': self,
             'active_since':
             self.startup_timestamp.strftime('%d.%m.%Y %H:%M:%S')
         }
 
+    def _rm_file_is_exists(self, name):
+        if os.path.exists(name):
+            os.remove(name)
+
     def shutdown(self):
+        self._rm_file_is_exists(RUNNING_INDICATOR)
+        self._rm_file_is_exists(STOPPING_INDICATOR)
         if self.active:
             self.active = False
             self.app.shutdown()
@@ -297,10 +322,34 @@ def setup_verbose_console_logging():
     ch.setFormatter(formatter)
     root.addHandler(ch)
 
+def start():
+    running_indicator = open(RUNNING_INDICATOR, 'w')
+    running_indicator.close()
+    c = config.Config()
+    if c.get('DEBUG'):
+        setup_verbose_console_logging()
+    server = AioWebServer(c)
+    server.run_app()
+
+def stop():
+    if not os.path.exists(RUNNING_INDICATOR):
+        return
+    want_to_stop = open(STOPPING_INDICATOR, 'w')
+    want_to_stop.close()
+    while os.path.exists(RUNNING_INDICATOR):
+        time.sleep(0.1)
+
+def restart():
+    stop()
+    start()
 
 if __name__ == "__main__":
-    config = config.Config()
-    if config.get('DEBUG'):
-        setup_verbose_console_logging()
-    server = AioWebServer(config)
-    server.run_app()
+    restart()
+    # parser = argparse.ArgumentParser(description='AIORestRabbit Service')
+    # parser.add_argument('start', metavar='N', type=int, nargs='+',
+    #                     help='an integer for the accumulator')
+    # parser.add_argument('--sum', dest='accumulate', action='store_const',
+    #                     const=sum, default=max,
+    #                     help='sum the integers (default: find the max)')
+
+    # args = parser.parse_args()

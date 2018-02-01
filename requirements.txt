@@ -2,4 +2,5 @@ aio-pika
 aiohttp
 aiohttp-session[secure]
 aiohttp_jinja2
+argparse
 PyYAML
