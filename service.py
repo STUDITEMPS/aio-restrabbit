@@ -322,16 +322,16 @@ def setup_verbose_console_logging():
     ch.setFormatter(formatter)
     root.addHandler(ch)
 
-def start():
+def start(args):
     running_indicator = open(RUNNING_INDICATOR, 'w')
     running_indicator.close()
     c = config.Config()
-    if c.get('DEBUG'):
+    if c.get('DEBUG') or args.verbose:
         setup_verbose_console_logging()
     server = AioWebServer(c)
     server.run_app()
 
-def stop():
+def stop(args):
     if not os.path.exists(RUNNING_INDICATOR):
         return
     want_to_stop = open(STOPPING_INDICATOR, 'w')
@@ -339,17 +339,25 @@ def stop():
     while os.path.exists(RUNNING_INDICATOR):
         time.sleep(0.1)
 
-def restart():
+def restart(args):
     stop()
-    start()
+    start(args)
+
+def clean(args):
+    for i in (RUNNING_INDICATOR, STOPPING_INDICATOR):
+        if os.path.exists(i):
+            os.rm(i)
 
 if __name__ == "__main__":
-    restart()
-    # parser = argparse.ArgumentParser(description='AIORestRabbit Service')
-    # parser.add_argument('start', metavar='N', type=int, nargs='+',
-    #                     help='an integer for the accumulator')
-    # parser.add_argument('--sum', dest='accumulate', action='store_const',
-    #                     const=sum, default=max,
-    #                     help='sum the integers (default: find the max)')
-
-    # args = parser.parse_args()
+    action_mapper = {
+        'start': start,
+        'stop': stop,
+        'restart': restart,
+        'clean': clean
+    }
+    parser = argparse.ArgumentParser(description='AIORestRabbit Service')
+    parser.add_argument('-v', '--verbose', action='store_const', const=True)
+    parser.add_argument('action', nargs='?', default="restart", choices=action_mapper.keys())
+    args = parser.parse_args()
+    action_mapper[args.action](args)
+    restart(args)
