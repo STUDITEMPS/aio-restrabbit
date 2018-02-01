@@ -24,9 +24,6 @@ import auth
 import config
 from kiss_api import KissApi, KissApiException, KissOfflineException
 
-RUNNING_INDICATOR = '.running'
-STOPPING_INDICATOR = '.stopping'
-
 class AioClientService(object):
     def __init__(self, root_service):
         self.root_service = root_service
@@ -190,6 +187,8 @@ class AioPikaService(AioClientService):
 
 
 class StartStopService(AioClientService):
+    RUNNING_INDICATOR = '.running'
+    STOPPING_INDICATOR = '.stopping'
 
     async def startup_service(self):
         self.root_service.loop.create_task(self.checker())
@@ -198,9 +197,34 @@ class StartStopService(AioClientService):
         self.active = False
 
     async def checker(self):
-        while self.active and not os.path.exists(STOPPING_INDICATOR):
+        while self.active and not os.path.exists(self.STOPPING_INDICATOR):
             await asyncio.sleep(.1)
         self.root_service.shutdown()
+
+    @classmethod
+    def run(cls):
+        # create RUNNING_INDICATOR file
+        open(cls.RUNNING_INDICATOR, 'w').close()
+
+    @classmethod
+    def stop(cls):
+         # create STOPPING_INDICATOR file
+        open(cls.STOPPING_INDICATOR, 'w').close()
+
+    @classmethod
+    def is_running(cls):
+        return os.path.exists(cls.RUNNING_INDICATOR)
+
+    @classmethod
+    def is_stopping(cls):
+        return os.path.exists(cls.STOPPING_INDICATOR)
+
+    @classmethod
+    def cleanup(cls):
+        for i in (cls.RUNNING_INDICATOR, cls.STOPPING_INDICATOR):
+            if os.path.exists(i):
+                os.remove(i)
+
 
 class AioWebServer(auth.OAuth2):
     """
@@ -285,8 +309,7 @@ class AioWebServer(auth.OAuth2):
             os.remove(name)
 
     def shutdown(self):
-        self._rm_file_is_exists(RUNNING_INDICATOR)
-        self._rm_file_is_exists(STOPPING_INDICATOR)
+        StartStopService.cleanup()
         if self.active:
             self.active = False
             self.app.shutdown()
@@ -323,8 +346,7 @@ def setup_verbose_console_logging():
     root.addHandler(ch)
 
 def start(args):
-    running_indicator = open(RUNNING_INDICATOR, 'w')
-    running_indicator.close()
+    StartStopService.run()
     c = config.Config()
     if c.get('DEBUG') or args.verbose:
         setup_verbose_console_logging()
@@ -332,21 +354,18 @@ def start(args):
     server.run_app()
 
 def stop(args):
-    if not os.path.exists(RUNNING_INDICATOR):
+    if not StartStopService.is_running():
         return
-    want_to_stop = open(STOPPING_INDICATOR, 'w')
-    want_to_stop.close()
-    while os.path.exists(RUNNING_INDICATOR):
+    StartStopService.stop()
+    while StartStopService.is_running():
         time.sleep(0.1)
 
 def restart(args):
-    stop()
+    stop(args)
     start(args)
 
 def clean(args):
-    for i in (RUNNING_INDICATOR, STOPPING_INDICATOR):
-        if os.path.exists(i):
-            os.rm(i)
+    StartStopService.cleanup()
 
 if __name__ == "__main__":
     action_mapper = {
@@ -360,4 +379,3 @@ if __name__ == "__main__":
     parser.add_argument('action', nargs='?', default="restart", choices=action_mapper.keys())
     args = parser.parse_args()
     action_mapper[args.action](args)
-    restart(args)
