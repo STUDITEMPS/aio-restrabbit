@@ -13,6 +13,8 @@ class KissApi(object):
         self.logger = logging.getLogger('KissApi')
         self.getting_token = False
         self.active_requests = 0
+        self.shutting_down = False
+        self.in_break = False
 
     async def refresh_access_token(self):
         self.logger.debug('getting a new_access token')
@@ -28,6 +30,7 @@ class KissApi(object):
                 'Unable to fetch the access token.\n'
                 'Service Response was: {} - {}'.format(status, data)
             )
+            self.getting_token = False
             raise KissApiException('unable to fetch api token')
         self.access_token = data['access_token']
         self.getting_token = False
@@ -61,11 +64,14 @@ class KissApi(object):
         self.access_token = None
         self.getting_token = False
         self.active_requests = 0
+        self.in_break = True
 
     async def send_msg(self, json_data, callback_url, first=True):
         self.logger.debug('sending msg')
         while self.getting_token:
             await asyncio.sleep(.1)
+        if self.in_break:
+            raise KissOfflineException('Kiss API is in break')
         if self.access_token is None:
             self.getting_token = True
             await self.refresh_access_token()

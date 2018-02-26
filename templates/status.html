@@ -20,7 +20,7 @@
         <tbody>
         {% for name, service in server.client_services.items() %}
         <tr>
-            {% with type, status = service.status() %}
+            {% with type, status = service.get_status() %}
                 <td>{{ name }}</td>
                 <td class="{{ type }}">{{ status }}</td>
                 <td>---</td>

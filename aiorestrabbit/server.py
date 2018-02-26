@@ -13,7 +13,6 @@ import os
 import traceback
 
 import aiorestrabbit.client
-from aiorestrabbit.kiss_api import KissApiException
 
 
 class AioWebServer(aiorestrabbit.auth.OAuth2):
@@ -111,19 +110,22 @@ class AioWebServer(aiorestrabbit.auth.OAuth2):
             self.loop.call_soon_threadsafe(self.loop.stop)
 
     def exception_handler(self, loop, context):
-        e = context.get('exception', None)
-        if not e:
+        exception = context.get('exception', None)
+        if exception is None:
             if context['message'] == 'Task was destroyed but it is pending!':
-                pass
+                return
             else:
                 self.logger.error(
                     'Unknown Exception: {}'.format(context['message'])
                 )
-        elif not isinstance(e, KissApiException):
+        else:
+            for client_service in self.client_services.values():
+                if client_service.handle_exception(exception):
+                    return
             self.logger.error(
                 ''.join(
-                    traceback.format_exception(e, None, e.__traceback__)
+                    traceback.format_exception(exception, None, exception.__traceback__)
                 )
             )
-            self.logger.error('{}: {}'.format(e.__class__.__name__, e))
+            self.logger.error('{}: {}'.format(exception.__class__.__name__, exception))
         self.shutdown()

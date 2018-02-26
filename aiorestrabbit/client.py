@@ -9,34 +9,102 @@ from aiorestrabbit.kiss_api import KissApiException
 from aiorestrabbit.kiss_api import KissOfflineException
 
 
+class AioClientStatus(object):
+    INIT = 0
+    STARTUP = 1
+    ACTIVE = 2
+    BREAK = 3
+    SHUTDOWN = 4
+    HALT = 5
+
+    STATE_NAMES = {
+        INIT: 'initialized',
+        STARTUP: 'starting',
+        ACTIVE: 'active',
+        BREAK: 'taking a break',
+        SHUTDOWN: 'shutting down',
+        HALT: 'halt'
+    }
+
+    def __init__(self):
+        self.status = self.INIT
+
+    def is_init(self):
+        return self.status == self.INIT
+
+    def set_starting(self):
+        self.status = self.STARTUP
+
+    def is_starting(self):
+        return self.status == self.STARTUP
+
+    def set_active(self):
+        self.status = self.ACTIVE
+
+    def is_active(self):
+        return self.status == self.ACTIVE
+
+    def set_break(self):
+        self.status = self.BREAK
+
+    def is_break(self):
+        return self.status == self.BREAK
+
+    def set_shutdown(self):
+        self.status = self.SHUTDOWN
+
+    def is_shutdown(self):
+        return self.status == self.SHUTDOWN
+
+    def set_halt(self):
+        self.status = self.HALT
+
+    def is_halt(self):
+        return self.status == self.HALT
+
+    def is_in(self, *states):
+        if len(states) == 1 and isinstance(states[0], (tuple, list)):
+            states = states[0]
+        return self.status in states
+
+    @property
+    def name(self):
+        return self.STATE_NAMES[self.status]
+
+    def __repr__(self):
+        return self.name
+
+
 class AioClientService(object):
     def __init__(self, root_service):
         self.root_service = root_service
         self.config = root_service.config
-        self.active = False
-        self.taking_a_break = False
+        self.status = AioClientStatus()
         self.loop = asyncio.get_event_loop()
         self.app = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def status(self):
-        if not self.active:
-            return ('error', 'offline')
-        if self.taking_a_break:
-            return ('warning', 'paused')
-        return ('success', 'active')
+    def get_status(self):
+        state_type = 'error'
+        if self.status.is_active():
+            state_type = 'success'
+        elif self.status.is_in(AioClientStatus.STARTUP, AioClientStatus.BREAK):
+            state_type = 'warning'
+        return (state_type, self.status)
 
     async def startup(self, app):
+        self.status.set_starting()
         self.app = app
-        self.active = True
         await self.startup_service()
+        self.status.set_active()
 
     async def startup_service(self):
         pass
 
     async def shutdown(self, app):
+        self.status.set_shutdown()
         await self.shutdown_service()
-        self.active = False
+        self.status.set_halt()
 
     async def shutdown_service(self):
         pass
@@ -44,19 +112,32 @@ class AioClientService(object):
     def __repr__(self):
         return self.__class__.__name__
 
-    async def take_a_break(self, timeout):
-        if self.taking_a_break:
+    async def take_a_break(self, timeout, msg=''):
+        if self.status.is_break():
             return
-        self.taking_a_break = True
-        self.logger.error(
-            u'Service {} is not working properly and takes a break for {} '
-            u'minutes'.format(self, timeout)
-        )
+        self.status.set_break()
+        if msg:
+            self.logger.error(msg)
+        else:
+            self.logger.error(
+                u'Service {} is not working properly and takes a break for {} '
+                u'seconds'.format(self, timeout)
+            )
         await self.shutdown_service()
         await asyncio.sleep(timeout)
+        self.logger.debug(u'Timeout is finished. Starting up {}'.format(self))
+        self.status.set_starting()
         await self.startup_service()
-        self.taking_a_break = False
-        self.logger.error(u'Back Online. Lets see if it works now')
+        self.logger.debug(u'Startup of {} Done.'.format(self))
+        self.status.set_active()
+        self.logger.debug(u'Break of {} Done.'.format(self))
+
+    def handle_exception(self, exception):
+        """
+        This function recieves an exception from the main loop excpetion handler
+        returns True is the exception is handeled, False otherwise
+        """
+        return False
 
 
 class AioPikaService(AioClientService):
@@ -85,24 +166,50 @@ class AioPikaService(AioClientService):
             for routing_key in data.keys():
                 await queue.bind(exchange, routing_key=routing_key)
         self.logger.debug('aio-pika connection ready')
+        self.kiss_api.in_break = False
         self.app['aio_pika'] = self.app.loop.create_task(
             queue.consume(self.on_rabbitmq_message, no_ack=False)
         )
 
     async def shutdown_service(self):
-        if not self.active:
+        connection_states = (
+            AioClientStatus.STARTUP,
+            AioClientStatus.BREAK,
+            AioClientStatus.ACTIVE
+        )
+        if not self.status.is_in(connection_states):
             self.logger.debug('Service is not active. no shutdown needed')
             return
         self.logger.debug('closing aio-pika connection...')
         self.app['aio_pika'].cancel()
         await self.app['aio_pika']
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(.5)
         self.logger.debug('wating for pending requests')
         await self.kiss_api.shutdown()
         self.logger.debug('done')
         await self.aio_pika_connection.close()
         self.rabbitmq_channel = None
         self.logger.debug('aio-pika connection closed')
+
+    def handle_exception(self, exception):
+        if isinstance(exception, aio_pika.exceptions.ChannelClosed):
+            need_channel_states = (
+                AioClientStatus.STARTUP,
+                AioClientStatus.ACTIVE
+            )
+            if not self.status.is_in(need_channel_states):
+                return True
+            self.root_service.loop.create_task(
+                self.take_a_break(
+                    60,
+                    'connection to CLOUDAMQP is broken. sleeping for 1 min.'
+                )
+            )
+            return True
+        elif isinstance(exception, KissApiException):
+            self.root_service.shutdown()
+            return True
+        return False
 
     def get_callback_for_message(self, message):
         exchanges_data = self.config.get('CLOUD_RABBITMQ', 'EXCHANGES')
@@ -118,7 +225,8 @@ class AioPikaService(AioClientService):
         return None
 
     async def on_rabbitmq_message(self, message: aio_pika.IncomingMessage):
-        if self.taking_a_break:
+        if not self.status.is_active():
+            message.reject(requeue=True)
             return
         callback_url = self.get_callback_for_message(message)
         if not callback_url:
@@ -143,7 +251,12 @@ class AioPikaService(AioClientService):
             raise e
         except KissOfflineException:
             message.reject(requeue=True)
-            self.root_service.loop.create_task(self.take_a_break(5))
+            self.root_service.loop.create_task(
+                self.take_a_break(
+                    60,
+                    'Kiss is Offline. Stopping {} for 1 min.'.format(self)
+                )
+            )
 
     async def get_exchange(self, exchange_name):
         exchange = self.exchanges.get(exchange_name)
@@ -171,7 +284,6 @@ class AioPikaService(AioClientService):
         )
         await exchange.publish(message, routing_key=routing_key)
 
-
 class StartStopService(AioClientService):
     RUNNING_INDICATOR = '.running'
     STOPPING_INDICATOR = '.stopping'
@@ -179,11 +291,8 @@ class StartStopService(AioClientService):
     async def startup_service(self):
         self.root_service.loop.create_task(self.checker())
 
-    async def shutdown_service(self):
-        self.active = False
-
     async def checker(self):
-        while self.active and not os.path.exists(self.STOPPING_INDICATOR):
+        while not self.status.is_halt() and not StartStopService.is_stopping():
             await asyncio.sleep(.1)
         self.root_service.shutdown()
 
