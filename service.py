@@ -7,7 +7,7 @@ import aiorestrabbit.auth
 import aiorestrabbit.config
 import aiorestrabbit.client
 import aiorestrabbit.server
-
+from aiorestrabbit import VERSION
 
 def setup_verbose_console_logging():
     root = logging.getLogger()
@@ -22,6 +22,8 @@ def setup_verbose_console_logging():
 
 
 def start(args):
+    if args.version:
+        print("AioRestRabbit Version {}".format(VERSION))
     aiorestrabbit.client.StartStopService.run()
     conf = aiorestrabbit.config.Config()
     if conf.get('DEBUG') or args.verbose:
@@ -56,6 +58,7 @@ if __name__ == "__main__":
     }
     parser = argparse.ArgumentParser(description='AIORestRabbit Service')
     parser.add_argument('-v', '--verbose', action='store_const', const=True)
+    parser.add_argument('-V', '--version', action='store_const', const=True)
     parser.add_argument(
         'action',
         nargs='?',

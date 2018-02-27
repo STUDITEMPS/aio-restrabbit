@@ -42,9 +42,9 @@ class KissApi(object):
                 status = resp.status
                 data = await resp.json()
                 return status, data
-            except aiohttp.client_exceptions.ContentTypeError as e:
+            except aiohttp.client_exceptions.ContentTypeError:
                 return status, await resp.text()
-            except aiohttp.client_exceptions.ClientConnectorError as e:
+            except aiohttp.client_exceptions.ClientConnectorError:
                 return 0, 'Connection to {} failed'.format(url)
             except aiohttp.client_exceptions.ServerDisconnectedError:
                 raise KissOfflineException('Unable to reach KISS')
@@ -92,7 +92,7 @@ class KissApi(object):
         if status == 401 and 'Invalid token' in str(data) and first:
             self.access_token = None
             self.logger.debug('invalid token! retry.')
-            return self.send_msg(json_data, first=False)
+            return self.send_msg(json_data, callback_url, first=False)
         elif status != 200:
             if status == 404:
                 data = 'page not found'

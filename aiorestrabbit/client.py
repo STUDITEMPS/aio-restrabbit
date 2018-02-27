@@ -291,6 +291,9 @@ class StartStopService(AioClientService):
     async def startup_service(self):
         self.root_service.loop.create_task(self.checker())
 
+    async def shutdown_service(self):
+        StartStopService.cleanup()
+
     async def checker(self):
         while not self.status.is_halt() and not StartStopService.is_stopping():
             await asyncio.sleep(.1)
