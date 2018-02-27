@@ -94,8 +94,6 @@ class KissApi(object):
             self.logger.debug('invalid token! retry.')
             return self.send_msg(json_data, callback_url, first=False)
         elif status != 200:
-            if status == 404:
-                data = 'page not found'
             self.logger.error(
                 'Error while sending to kiss endpoint.\nMessage was: {}\n'
                 'Response was: {} - {}\n'
