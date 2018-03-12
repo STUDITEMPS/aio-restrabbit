@@ -93,6 +93,10 @@ class KissApi(object):
             self.access_token = None
             self.logger.debug('invalid token! retry.')
             return self.send_msg(json_data, callback_url, first=False)
+        elif status == 503:
+            raise KissOfflineException(
+                '503 while sending to kiss endpoint: {}'.format(data)
+            )
         elif status != 200:
             self.logger.error(
                 'Error while sending to kiss endpoint.\nMessage was: {}\n'

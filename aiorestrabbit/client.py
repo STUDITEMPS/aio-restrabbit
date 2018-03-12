@@ -249,12 +249,13 @@ class AioPikaService(AioClientService):
         except KissApiException as e:
             message.reject(requeue=True)
             raise e
-        except KissOfflineException:
+        except KissOfflineException as e:
             message.reject(requeue=True)
             self.root_service.loop.create_task(
                 self.take_a_break(
                     60,
-                    'Kiss is Offline. Stopping {} for 1 min.'.format(self)
+                    'Kiss is Offline. Stopping {} for 1 min. Details: {}'
+                    .format(self, e)
                 )
             )
 
