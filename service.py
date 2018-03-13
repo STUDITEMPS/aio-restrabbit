@@ -9,11 +9,11 @@ import aiorestrabbit.client
 import aiorestrabbit.server
 from aiorestrabbit import VERSION
 
-def setup_verbose_console_logging():
+def setup_console_logging(level=logging.ERROR):
     root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
+    root.setLevel(level)
     ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(logging.DEBUG)
+    ch.setLevel(level)
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
@@ -26,8 +26,10 @@ def start(args):
         print("AioRestRabbit Version {}".format(VERSION))
     aiorestrabbit.client.StartStopService.run()
     conf = aiorestrabbit.config.Config()
+    loglevel = logging.ERROR
     if conf.get('DEBUG') or args.verbose:
-        setup_verbose_console_logging()
+        loglevel = logging.DEBUG
+    setup_console_logging(level=loglevel)
     server = aiorestrabbit.server.AioWebServer(conf)
     server.run_app()
 
