@@ -147,6 +147,11 @@ class AioPikaService(AioClientService):
         self.rabbitmq_channel = None
         self.kiss_api = KissApi(self.config)
         self.exchanges = {}
+        self.concurrent_requests = 0
+        self.max_concurrent_requests= self.config.get(
+            'KISS',
+            'MAX_CONCURRENT_REQUESTS'
+        )
 
     async def startup_service(self):
         self.logger.debug('Starting aio-pika connection...')
@@ -225,25 +230,33 @@ class AioPikaService(AioClientService):
         return None
 
     async def on_rabbitmq_message(self, message: aio_pika.IncomingMessage):
+        self.concurrent_requests += 1
+        if self.concurrent_requests >= self.max_concurrent_requests:
+            self.logger.error('TOO MANY CONCURRENT REQUESTS... requeuing')
+            message.reject(requeue=True)
+            self.concurrent_requests -= 1
+            return
         if not self.status.is_active():
             message.reject(requeue=True)
+            self.concurrent_requests -= 1
             return
         callback_url = self.get_callback_for_message(message)
         if not callback_url:
             self.logger.error('WTF? unknown routing key: {}'.format(
                 message.routing_key
             ))
+            message.reject(requeue=True)
+            self.concurrent_requests -= 1
             return
-
-        msg = json.dumps({
-            'headers': message.headers,
-            'content_encoding': message.content_encoding,
-            'message_id': message.message_id,
-            'type': message.type,
-            'routing_key': message.routing_key,
-            'body': message.body.decode(message.content_encoding or 'utf8')
-        })
         try:
+            msg = json.dumps({
+                'headers': message.headers,
+                'content_encoding': message.content_encoding,
+                'message_id': message.message_id,
+                'type': message.type,
+                'routing_key': message.routing_key,
+                'body': message.body.decode(message.content_encoding or 'utf8')
+            })
             await self.kiss_api.send_msg(msg, callback_url)
             message.ack()
         except KissApiException as e:
@@ -258,6 +271,8 @@ class AioPikaService(AioClientService):
                     .format(self, e)
                 )
             )
+        finally:
+            self.concurrent_requests -= 1
 
     async def get_exchange(self, exchange_name):
         exchange = self.exchanges.get(exchange_name)

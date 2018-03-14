@@ -67,7 +67,7 @@ class KissApi(object):
         self.in_break = True
 
     async def send_msg(self, json_data, callback_url, first=True):
-        self.logger.debug('sending msg')
+        self.logger.debug('sending msg: {}'.format(json_data))
         while self.getting_token:
             await asyncio.sleep(.1)
         if self.in_break:
