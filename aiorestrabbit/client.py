@@ -232,7 +232,7 @@ class AioPikaService(AioClientService):
     async def on_rabbitmq_message(self, message: aio_pika.IncomingMessage):
         self.concurrent_requests += 1
         if self.concurrent_requests >= self.max_concurrent_requests:
-            self.logger.error('TOO MANY CONCURRENT REQUESTS... requeuing')
+            self.logger.warning('TOO MANY CONCURRENT REQUESTS... requeuing')
             message.reject(requeue=True)
             self.concurrent_requests -= 1
             return
