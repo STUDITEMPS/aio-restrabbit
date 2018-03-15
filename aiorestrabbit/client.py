@@ -233,6 +233,7 @@ class AioPikaService(AioClientService):
         self.concurrent_requests += 1
         if self.concurrent_requests >= self.max_concurrent_requests:
             self.logger.warning('TOO MANY CONCURRENT REQUESTS... requeuing')
+            await asyncio.sleep(1)
             message.reject(requeue=True)
             self.concurrent_requests -= 1
             return
