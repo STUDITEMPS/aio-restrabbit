@@ -25,7 +25,11 @@ class KissApi(object):
             allow_redirects=True,
             verify_ssl=True
         )
-        if status != 200:
+        if status in [502, 503]:
+            raise KissOfflineException(
+                '{} while sending to kiss endpoint: {}'.format(status, data)
+            )
+        elif status != 200:
             self.logger.error(
                 'Unable to fetch the access token.\n'
                 'Service Response was: {} - {}'.format(status, data)
@@ -93,9 +97,9 @@ class KissApi(object):
             self.access_token = None
             self.logger.debug('invalid token! retry.')
             return self.send_msg(json_data, callback_url, first=False)
-        elif status == 503:
+        elif status in [502, 503]:
             raise KissOfflineException(
-                '503 while sending to kiss endpoint: {}'.format(data)
+                '{} while sending to kiss endpoint: {}'.format(status, data)
             )
         elif status != 200:
             self.logger.error(
